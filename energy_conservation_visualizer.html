@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>能量不滅定律｜互動式視覺化</title>
+  <style>
+    :root {
+      --bg: #07111f;
+      --panel: rgba(11, 25, 45, 0.84);
+      --panel-2: rgba(15, 34, 59, 0.92);
+      --text: #e8f1ff;
+      --muted: #9db3d1;
+      --accent: #83d8ff;
+      --pe: #6bc5ff;
+      --ke: #ffd166;
+      --te: #ff7b7b;
+      --grid: rgba(255,255,255,0.08);
+      --shadow: 0 18px 50px rgba(0,0,0,0.28);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, "Noto Sans TC", system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(69,136,255,0.20), transparent 34%),
+        radial-gradient(circle at bottom right, rgba(255,123,123,0.16), transparent 30%),
+        linear-gradient(160deg, #04101d, #08182a 46%, #091f36 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .app {
+      width: min(1280px, 100%);
+      display: grid;
+      grid-template-columns: 1.35fr 0.9fr;
+      gap: 20px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+    .stage-panel {
+      overflow: hidden;
+      position: relative;
+      min-height: 760px;
+    }
+    #scene {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.02), rgba(255,255,255,0));
+    }
+    .hud {
+      position: absolute;
+      inset: 18px 18px auto 18px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      pointer-events: none;
+    }
+    .title-box, .stat-box {
+      background: rgba(6, 18, 33, 0.68);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 18px;
+      padding: 14px 16px;
+      backdrop-filter: blur(10px);
+    }
+    .title-box h1 {
+      margin: 0 0 6px;
+      font-size: 1.3rem;
+    }
+    .title-box p, .stat-box p { margin: 0; color: var(--muted); line-height: 1.45; }
+    .stat-box { text-align: right; }
+    .controls {
+      background: var(--panel-2);
+      padding: 22px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .section h2 {
+      margin: 0 0 8px;
+      font-size: 1.02rem;
+    }
+    .section p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 0.95rem;
+    }
+    .control-grid {
+      display: grid;
+      gap: 14px;
+    }
+    .control {
+      display: grid;
+      gap: 8px;
+    }
+    .label-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 0.95rem;
+    }
+    .label-row .value { color: var(--accent); font-variant-numeric: tabular-nums; }
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 14px;
+      background: #103253;
+      color: var(--text);
+      cursor: pointer;
+      font-weight: 600;
+      transition: transform .15s ease, background .15s ease;
+    }
+    button:hover { transform: translateY(-1px); background: #16446f; }
+    button.secondary { background: rgba(255,255,255,0.08); }
+    .legend {
+      display: grid;
+      gap: 8px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.04);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 10px;
+      vertical-align: middle;
+    }
+    .dot.pe { background: var(--pe); }
+    .dot.ke { background: var(--ke); }
+    .dot.te { background: var(--te); }
+    .mini-note {
+      font-size: 0.9rem;
+      color: var(--muted);
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.04);
+      line-height: 1.5;
+    }
+    @media (max-width: 1040px) {
+      .app { grid-template-columns: 1fr; }
+      .stage-panel { min-height: 540px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section class="panel stage-panel">
+      <canvas id="scene" width="860" height="760"></canvas>
+      <div class="hud">
+        <div class="title-box">
+          <h1>能量不滅定律：位能 ↔ 動能 ↔ 熱能</h1>
+          <p>拖動右側參數，觀察小球在重力下移動時，能量如何在不同形式之間轉換，但總能量保持不變。</p>
+        </div>
+        <div class="stat-box">
+          <p>總能量</p>
+          <strong id="totalEnergy" style="font-size:1.1rem;">0 J</strong>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel controls">
+      <div class="section">
+        <h2>怎麼看</h2>
+        <p>藍色是位能、金色是動能、紅色是因阻尼轉成的熱能。右側長條圖加總永遠等於初始總能量。</p>
+      </div>
+
+      <div class="section control-grid">
+        <div class="control">
+          <div class="label-row"><span>質量 m</span><span class="value" id="massVal"></span></div>
+          <input id="mass" type="range" min="0.5" max="5" step="0.1" value="1.5" />
+        </div>
+        <div class="control">
+          <div class="label-row"><span>重力 g</span><span class="value" id="gravityVal"></span></div>
+          <input id="gravity" type="range" min="1" max="20" step="0.1" value="9.8" />
+        </div>
+        <div class="control">
+          <div class="label-row"><span>起始高度</span><span class="value" id="heightVal"></span></div>
+          <input id="height" type="range" min="0.2" max="0.95" step="0.01" value="0.75" />
+        </div>
+        <div class="control">
+          <div class="label-row"><span>空氣阻尼</span><span class="value" id="dragVal"></span></div>
+          <input id="drag" type="range" min="0" max="0.08" step="0.001" value="0.008" />
+        </div>
+        <div class="control">
+          <div class="label-row"><span>碰撞耗散</span><span class="value" id="bounceVal"></span></div>
+          <input id="bounceLoss" type="range" min="0" max="0.45" step="0.01" value="0.08" />
+        </div>
+        <div class="control">
+          <div class="label-row"><span>播放速度</span><span class="value" id="speedVal"></span></div>
+          <input id="speed" type="range" min="0.3" max="2.5" step="0.1" value="1.0" />
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button id="toggleBtn">暫停</button>
+        <button id="resetBtn" class="secondary">重設</button>
+        <button id="dropBtn" class="secondary">重新下落</button>
+      </div>
+
+      <div class="legend" id="energyReadout"></div>
+
+      <div class="mini-note">
+        小提醒：如果阻尼與碰撞耗散設為 0，位能與動能會來回轉換；若增加耗散，機械能會下降，但紅色熱能上升，因此總能量仍守恆。
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('scene');
+    const ctx = canvas.getContext('2d');
+
+    const controls = {
+      mass: document.getElementById('mass'),
+      gravity: document.getElementById('gravity'),
+      height: document.getElementById('height'),
+      drag: document.getElementById('drag'),
+      bounceLoss: document.getElementById('bounceLoss'),
+      speed: document.getElementById('speed')
+    };
+
+    const labels = {
+      mass: document.getElementById('massVal'),
+      gravity: document.getElementById('gravityVal'),
+      height: document.getElementById('heightVal'),
+      drag: document.getElementById('dragVal'),
+      bounceLoss: document.getElementById('bounceVal'),
+      speed: document.getElementById('speedVal')
+    };
+
+    const totalEnergyEl = document.getElementById('totalEnergy');
+    const energyReadout = document.getElementById('energyReadout');
+    const toggleBtn = document.getElementById('toggleBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const dropBtn = document.getElementById('dropBtn');
+
+    const colors = {
+      pe: '#6bc5ff',
+      ke: '#ffd166',
+      te: '#ff7b7b',
+      glow: '#83d8ff',
+      floor: '#163b63',
+      track: '#2f527e'
+    };
+
+    const world = {
+      floorY: 650,
+      topY: 120,
+      x: 240,
+      radius: 26,
+      y: 200,
+      vy: 0,
+      thermal: 0,
+      total: 0,
+      initialHeightPx: 0,
+      running: true,
+      lastTime: performance.now(),
+      bounceFlash: 0
+    };
+
+    function getConfig() {
+      return {
+        mass: parseFloat(controls.mass.value),
+        gravity: parseFloat(controls.gravity.value),
+        heightNorm: parseFloat(controls.height.value),
+        drag: parseFloat(controls.drag.value),
+        bounceLoss: parseFloat(controls.bounceLoss.value),
+        speed: parseFloat(controls.speed.value)
+      };
+    }
+
+    function worldHeightMeters() {
+      return 10;
+    }
+
+    function pixelsPerMeter() {
+      return (world.floorY - world.topY) / worldHeightMeters();
+    }
+
+    function clamp(v, min, max) {
+      return Math.min(max, Math.max(min, v));
+    }
+
+    function updateLabels() {
+      const c = getConfig();
+      labels.mass.textContent = `${c.mass.toFixed(1)} kg`;
+      labels.gravity.textContent = `${c.gravity.toFixed(1)} m/s²`;
+      labels.height.textContent = `${(c.heightNorm * 100).toFixed(0)} %`;
+      labels.drag.textContent = c.drag.toFixed(3);
+      labels.bounceLoss.textContent = `${(c.bounceLoss * 100).toFixed(0)} %`;
+      labels.speed.textContent = `${c.speed.toFixed(1)}×`;
+    }
+
+    function resetSimulation() {
+      const c = getConfig();
+      world.initialHeightPx = (world.floorY - world.topY) * c.heightNorm;
+      world.y = world.floorY - world.initialHeightPx;
+      world.vy = 0;
+      world.thermal = 0;
+      world.bounceFlash = 0;
+      const hMeters = world.initialHeightPx / pixelsPerMeter();
+      world.total = c.mass * c.gravity * hMeters;
+      world.lastTime = performance.now();
+      render();
+    }
+
+    function mechanicalEnergy(c) {
+      const hMeters = Math.max(0, (world.floorY - world.y) / pixelsPerMeter());
+      const pe = c.mass * c.gravity * hMeters;
+      const ke = 0.5 * c.mass * world.vy * world.vy;
+      const te = Math.max(0, world.total - pe - ke);
+      world.thermal = te;
+      return { pe, ke, te, total: world.total, hMeters };
+    }
+
+    function simulate(dt) {
+      const c = getConfig();
+      const substeps = 3;
+      const step = (dt * c.speed) / substeps;
+      for (let i = 0; i < substeps; i++) {
+        world.vy += c.gravity * step;
+        const dragFactor = Math.max(0, 1 - c.drag * 7 * step);
+        world.vy *= dragFactor;
+        world.y += world.vy * pixelsPerMeter() * step;
+
+        if (world.y + world.radius >= world.floorY) {
+          world.y = world.floorY - world.radius;
+          if (Math.abs(world.vy) > 0.02) {
+            world.vy = -world.vy * Math.sqrt(Math.max(0, 1 - c.bounceLoss));
+            world.bounceFlash = 1;
+          } else {
+            world.vy = 0;
+          }
+        }
+
+        if (world.y - world.radius < world.topY) {
+          world.y = world.topY + world.radius;
+          world.vy = Math.abs(world.vy) * 0.2;
+        }
+      }
+
+      world.bounceFlash *= 0.92;
+    }
+
+    function drawBackground() {
+      const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      g.addColorStop(0, '#071426');
+      g.addColorStop(1, '#0d2139');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      for (let i = 0; i < 16; i++) {
+        const y = 80 + i * 38;
+        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(30, y);
+        ctx.lineTo(510, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      ctx.save();
+      ctx.strokeStyle = 'rgba(131,216,255,0.35)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(80, world.floorY);
+      ctx.lineTo(430, world.floorY);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawHeightAxis() {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(80, world.floorY);
+      ctx.lineTo(80, world.topY);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(232,241,255,0.7)';
+      ctx.font = '13px Inter, sans-serif';
+      ctx.textAlign = 'right';
+      for (let m = 0; m <= 10; m += 2) {
+        const y = world.floorY - m * pixelsPerMeter();
+        ctx.beginPath();
+        ctx.moveTo(74, y);
+        ctx.lineTo(86, y);
+        ctx.stroke();
+        ctx.fillText(`${m} m`, 65, y + 4);
+      }
+      ctx.restore();
+    }
+
+    function drawBall(energy) {
+      const glow = 26 + energy.ke * 0.55;
+      ctx.save();
+      ctx.shadowBlur = glow;
+      ctx.shadowColor = 'rgba(131,216,255,0.5)';
+      ctx.fillStyle = 'rgba(131,216,255,0.14)';
+      ctx.beginPath();
+      ctx.arc(world.x, world.y, world.radius + 18 + glow * 0.12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      const ballGrad = ctx.createRadialGradient(world.x - 10, world.y - 14, 8, world.x, world.y, world.radius + 8);
+      ballGrad.addColorStop(0, '#ecf9ff');
+      ballGrad.addColorStop(0.42, '#8de3ff');
+      ballGrad.addColorStop(1, '#1b6ca8');
+      ctx.fillStyle = ballGrad;
+      ctx.beginPath();
+      ctx.arc(world.x, world.y, world.radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (world.bounceFlash > 0.02) {
+        ctx.strokeStyle = `rgba(255,123,123,${0.36 * world.bounceFlash})`;
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(world.x, world.floorY - 2, 24 + 30 * world.bounceFlash, Math.PI, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      const speedLen = clamp(Math.abs(world.vy) * 18, 0, 110);
+      ctx.strokeStyle = 'rgba(255,209,102,0.82)';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(world.x + 60, world.y);
+      ctx.lineTo(world.x + 60, world.y + Math.sign(world.vy || 1) * speedLen);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,209,102,0.9)';
+      ctx.font = '13px Inter, sans-serif';
+      ctx.fillText('速度', world.x + 72, world.y + Math.sign(world.vy || 1) * (speedLen * 0.5));
+    }
+
+    function drawEnergyBars(energy) {
+      const x = 570;
+      const y = 180;
+      const w = 210;
+      const h = 390;
+      const barW = 44;
+      const gap = 18;
+      const max = Math.max(energy.total, 1);
+      const items = [
+        { key: 'pe', label: '位能', value: energy.pe, color: colors.pe },
+        { key: 'ke', label: '動能', value: energy.ke, color: colors.ke },
+        { key: 'te', label: '熱能', value: energy.te, color: colors.te }
+      ];
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,255,255,0.03)';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      ctx.strokeRect(x, y, w, h);
+
+      for (let i = 0; i <= 5; i++) {
+        const gy = y + h - (i / 5) * h;
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.beginPath();
+        ctx.moveTo(x, gy);
+        ctx.lineTo(x + w, gy);
+        ctx.stroke();
+      }
+
+      items.forEach((item, index) => {
+        const bx = x + 24 + index * (barW + gap);
+        const bh = clamp((item.value / max) * (h - 32), 0, h - 32);
+        const by = y + h - bh - 16;
+
+        const grad = ctx.createLinearGradient(0, by, 0, by + bh);
+        grad.addColorStop(0, item.color);
+        grad.addColorStop(1, 'rgba(255,255,255,0.18)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(bx, by, barW, bh);
+
+        ctx.fillStyle = 'rgba(232,241,255,0.92)';
+        ctx.font = '13px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(item.label, bx + barW / 2, y + h + 24);
+        ctx.fillText(`${item.value.toFixed(1)} J`, bx + barW / 2, by - 10);
+      });
+
+      ctx.fillStyle = 'rgba(232,241,255,0.76)';
+      ctx.font = '15px Inter, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('能量分布', x, y - 18);
+      ctx.restore();
+    }
+
+    function drawEquation(energy) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(232,241,255,0.95)';
+      ctx.font = '700 26px Inter, sans-serif';
+      ctx.fillText('E總 = E位能 + E動能 + E熱能', 72, 80);
+      ctx.font = '17px Inter, sans-serif';
+      ctx.fillStyle = 'rgba(232,241,255,0.78)';
+      ctx.fillText(`${energy.total.toFixed(2)} = ${energy.pe.toFixed(2)} + ${energy.ke.toFixed(2)} + ${energy.te.toFixed(2)}  (J)`, 72, 110);
+      ctx.restore();
+    }
+
+    function renderLegend(energy) {
+      const rows = [
+        { cls: 'pe', label: '位能', value: energy.pe, note: `高度 ${energy.hMeters.toFixed(2)} m` },
+        { cls: 'ke', label: '動能', value: energy.ke, note: `速度 ${Math.abs(world.vy).toFixed(2)} m/s` },
+        { cls: 'te', label: '熱能', value: energy.te, note: '阻尼 / 碰撞耗散' }
+      ];
+      energyReadout.innerHTML = rows.map(r => `
+        <div class="legend-item">
+          <div><span class="dot ${r.cls}"></span>${r.label}<div style="font-size:0.82rem;color:#8ea4c3;margin-top:4px;">${r.note}</div></div>
+          <strong style="color:#eef6ff;">${r.value.toFixed(2)} J</strong>
+        </div>
+      `).join('');
+      totalEnergyEl.textContent = `${energy.total.toFixed(2)} J`;
+    }
+
+    function render() {
+      const c = getConfig();
+      const energy = mechanicalEnergy(c);
+      drawBackground();
+      drawHeightAxis();
+      drawEquation(energy);
+      drawBall(energy);
+      drawEnergyBars(energy);
+      renderLegend(energy);
+    }
+
+    function loop(now) {
+      const dt = Math.min(0.03, (now - world.lastTime) / 1000 || 0.016);
+      world.lastTime = now;
+      if (world.running) simulate(dt);
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    Object.values(controls).forEach(input => {
+      input.addEventListener('input', () => {
+        updateLabels();
+        resetSimulation();
+      });
+    });
+
+    toggleBtn.addEventListener('click', () => {
+      world.running = !world.running;
+      toggleBtn.textContent = world.running ? '暫停' : '播放';
+    });
+
+    resetBtn.addEventListener('click', () => {
+      controls.mass.value = '1.5';
+      controls.gravity.value = '9.8';
+      controls.height.value = '0.75';
+      controls.drag.value = '0.008';
+      controls.bounceLoss.value = '0.08';
+      controls.speed.value = '1.0';
+      updateLabels();
+      resetSimulation();
+    });
+
+    dropBtn.addEventListener('click', () => {
+      resetSimulation();
+      world.running = true;
+      toggleBtn.textContent = '暫停';
+    });
+
+    updateLabels();
+    resetSimulation();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
